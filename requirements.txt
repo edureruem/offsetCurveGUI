@@ -1,31 +1,13 @@
-# Offset Curve Deformer & Input Curve Optimizer GUI - Maya 2020 호환 버전
-# Python 패키지 의존성
+# Core dependencies
+numpy>=1.19.0
 
-# Maya 2020 호환 GUI 프레임워크
-PySide2>=5.15.0  # Maya 2020 기본 제공 버전과 호환
+# Maya integration (optional for standalone use)
+# maya-python>=1.0.0
 
-# 수치 계산 및 수학
-numpy>=1.19.0    # Maya 2020 Python 2.7 호환
-scipy>=1.5.0     # Maya 2020 Python 2.7 호환
+# GUI framework (Maya 2020 provides PySide2)
+# PySide2>=5.12.0
 
-# 벡터 그래픽 처리
-svgpathtools>=1.4.1
-bezier>=2021.2.12
-
-# 이미지 처리
-Pillow>=8.0.0    # Maya 2020 Python 2.7 호환
-
-# 데이터 처리
-pandas>=1.1.0    # Maya 2020 Python 2.7 호환
-
-# Maya API 연동
-maya.cmds        # Maya 2020 기본 제공
-maya.OpenMaya    # Maya 2020 기본 제공
-
-# 로깅 및 유틸리티
-colorama>=0.4.4
-
-# 개발 도구 (선택사항)
-# pytest>=6.2.5
-# black>=21.7b0
-# flake8>=3.9.0
+# Development dependencies
+pytest>=6.0.0
+black>=21.0.0
+flake8>=3.8.0

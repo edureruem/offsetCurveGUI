@@ -5,425 +5,467 @@
 다양한 오프셋 생성 알고리즘을 제공
 """
 
-from abc import ABC, abstractmethod
-from typing import Dict, Any, List, Tuple, Optional
+import numpy as np
+from typing import List, Tuple, Optional, Union
 import math
 
-class BaseOffsetAlgorithm(ABC):
-    """오프셋 알고리즘 기본 클래스"""
+class OffsetCurveAlgorithm:
+    """오프셋 커브 생성 알고리즘의 기본 클래스"""
     
-    @abstractmethod
-    def generate_offset(self, points: List[Tuple[float, float]], 
-                       distance: float, parameters: Dict[str, Any]) -> Optional[List[Tuple[float, float]]]:
-        """포인트로부터 오프셋 커브 생성"""
-        pass
+    def __init__(self):
+        self.tolerance = 0.01
+        self.max_iterations = 100
     
-    @abstractmethod
-    def validate_parameters(self, parameters: Dict[str, Any]):
-        """파라미터 유효성 검증"""
-        pass
+    def generate_offset(self, curve_points: np.ndarray, offset_distance: float, 
+                       **kwargs) -> np.ndarray:
+        """오프셋 커브 생성 (추상 메서드)"""
+        raise NotImplementedError("Subclasses must implement generate_offset")
 
-class ParallelOffsetAlgorithm(BaseOffsetAlgorithm):
-    """평행 오프셋 알고리즘"""
+class ArcSegmentOffsetAlgorithm(OffsetCurveAlgorithm):
+    """Arc Segment 방식 오프셋 알고리즘"""
     
-    def generate_offset(self, points: List[Tuple[float, float]], 
-                       distance: float, parameters: Dict[str, Any]) -> Optional[List[Tuple[float, float]]]:
-        """평행 오프셋 커브 생성"""
-        if len(points) < 2:
-            return None
+    def __init__(self, segment_count: int = 8, tolerance: float = 0.01):
+        super().__init__()
+        self.segment_count = segment_count
+        self.tolerance = tolerance
+    
+    def generate_offset(self, curve_points: np.ndarray, offset_distance: float, 
+                       **kwargs) -> np.ndarray:
+        """
+        Arc Segment 방식으로 오프셋 커브 생성
         
-        smooth_curves = parameters.get('smooth_curves', True)
-        corner_handling = parameters.get('corner_handling', 'adaptive')
+        Args:
+            curve_points: 원본 커브의 제어점들 (N x 3)
+            offset_distance: 오프셋 거리
+            **kwargs: 추가 옵션들
+            
+        Returns:
+            오프셋 커브의 제어점들
+        """
+        if len(curve_points) < 2:
+            return curve_points.copy()
         
-        # 각 세그먼트에 대한 법선 벡터 계산
-        normals = self._calculate_normals(points)
+        # 각 세그먼트를 호(arc)로 근사하여 오프셋 생성
+        offset_points = []
+        
+        for i in range(len(curve_points) - 1):
+            p1 = curve_points[i]
+            p2 = curve_points[i + 1]
+            
+            # 세그먼트의 중점과 방향 벡터 계산
+            mid_point = (p1 + p2) / 2
+            segment_vector = p2 - p1
+            segment_length = np.linalg.norm(segment_vector)
+            
+            if segment_length < self.tolerance:
+                continue
+            
+            # 세그먼트에 수직인 방향 벡터 계산
+            if len(p1) == 3:  # 3D
+                # Z축을 기준으로 수직 벡터 계산
+                if abs(segment_vector[2]) < 0.9:
+                    normal = np.cross(segment_vector, [0, 0, 1])
+                else:
+                    normal = np.cross(segment_vector, [1, 0, 0])
+            else:  # 2D
+                normal = np.array([-segment_vector[1], segment_vector[0]])
+            
+            normal = normal / np.linalg.norm(normal)
+            
+            # 오프셋 포인트 생성
+            offset_point = mid_point + normal * offset_distance
+            offset_points.append(offset_point)
+        
+        # 마지막 포인트 처리
+        if len(curve_points) > 1:
+            last_segment_vector = curve_points[-1] - curve_points[-2]
+            if len(curve_points[-1]) == 3:
+                if abs(last_segment_vector[2]) < 0.9:
+                    last_normal = np.cross(last_segment_vector, [0, 0, 1])
+                else:
+                    last_normal = np.cross(last_segment_vector, [1, 0, 0])
+            else:
+                last_normal = np.array([-last_segment_vector[1], last_segment_vector[0]])
+            
+            last_normal = last_normal / np.linalg.norm(last_normal)
+            last_offset = curve_points[-1] + last_normal * offset_distance
+            offset_points.append(last_offset)
+        
+        return np.array(offset_points)
+    
+    def generate_smooth_offset(self, curve_points: np.ndarray, offset_distance: float,
+                              smoothing_factor: float = 0.3, **kwargs) -> np.ndarray:
+        """
+        부드러운 Arc Segment 오프셋 생성
+        
+        Args:
+            curve_points: 원본 커브의 제어점들
+            offset_distance: 오프셋 거리
+            smoothing_factor: 스무딩 강도 (0.0 ~ 1.0)
+            **kwargs: 추가 옵션들
+            
+        Returns:
+            부드러운 오프셋 커브의 제어점들
+        """
+        # 기본 오프셋 생성
+        base_offset = self.generate_offset(curve_points, offset_distance, **kwargs)
+        
+        if len(base_offset) < 3:
+            return base_offset
+        
+        # Laplacian 스무딩 적용
+        smoothed_offset = base_offset.copy()
+        
+        for _ in range(int(10 * smoothing_factor)):
+            for i in range(1, len(smoothed_offset) - 1):
+                # 이웃 포인트들의 평균 계산
+                neighbor_avg = (smoothed_offset[i-1] + smoothed_offset[i+1]) / 2
+                # 스무딩 적용
+                smoothed_offset[i] = (1 - smoothing_factor) * smoothed_offset[i] + \
+                                   smoothing_factor * neighbor_avg
+        
+        return smoothed_offset
+
+class BSplineOffsetAlgorithm(OffsetCurveAlgorithm):
+    """B-Spline 방식 오프셋 알고리즘"""
+    
+    def __init__(self, degree: int = 3, knot_type: str = "Uniform"):
+        super().__init__()
+        self.degree = degree
+        self.knot_type = knot_type
+    
+    def generate_offset(self, curve_points: np.ndarray, offset_distance: float,
+                       **kwargs) -> np.ndarray:
+        """
+        B-Spline 방식으로 오프셋 커브 생성
+        
+        Args:
+            curve_points: 원본 커브의 제어점들
+            offset_distance: 오프셋 거리
+            **kwargs: 추가 옵션들
+            
+        Returns:
+            오프셋 커브의 제어점들
+        """
+        if len(curve_points) < self.degree + 1:
+            return curve_points.copy()
+        
+        # B-Spline 노트 벡터 생성
+        knots = self._generate_knots(len(curve_points), self.degree)
+        
+        # 각 제어점에서의 접선 벡터 계산
+        tangent_vectors = self._calculate_tangents(curve_points, knots, self.degree)
         
         # 오프셋 포인트 생성
         offset_points = []
-        for i, point in enumerate(points):
-            if i == 0 or i == len(points) - 1:
-                # 시작점과 끝점은 단순 이동
-                normal = normals[i] if i < len(normals) else normals[i-1]
-                offset_point = (point[0] + normal[0] * distance, point[1] + normal[1] * distance)
-            else:
-                # 중간점은 두 세그먼트의 평균 법선 사용
-                prev_normal = normals[i-1]
-                curr_normal = normals[i]
+        for i, (point, tangent) in enumerate(zip(curve_points, tangent_vectors)):
+            if np.linalg.norm(tangent) > self.tolerance:
+                # 접선에 수직인 방향 벡터 계산
+                if len(point) == 3:  # 3D
+                    # 임의의 벡터와 cross product로 수직 벡터 생성
+                    if abs(tangent[2]) < 0.9:
+                        normal = np.cross(tangent, [0, 0, 1])
+                    else:
+                        normal = np.cross(tangent, [1, 0, 0])
+                else:  # 2D
+                    normal = np.array([-tangent[1], tangent[0]])
                 
-                # 법선 벡터 평균화
-                avg_normal_x = (prev_normal[0] + curr_normal[0]) / 2
-                avg_normal_y = (prev_normal[1] + curr_normal[1]) / 2
-                
-                # 정규화
-                mag = math.sqrt(avg_normal_x**2 + avg_normal_y**2)
-                if mag > 0:
-                    avg_normal_x /= mag
-                    avg_normal_y /= mag
-                
-                offset_point = (point[0] + avg_normal_x * distance, point[1] + avg_normal_y * distance)
-            
-            offset_points.append(offset_point)
-        
-        # 모서리 처리
-        if corner_handling != 'none':
-            offset_points = self._handle_corners(offset_points, corner_handling, parameters)
-        
-        # 부드럽게 처리
-        if smooth_curves:
-            offset_points = self._smooth_offset_curve(offset_points, parameters)
-        
-        return offset_points
-    
-    def validate_parameters(self, parameters: Dict[str, Any]):
-        """파라미터 유효성 검증"""
-        corner_handling = parameters.get('corner_handling', 'adaptive')
-        if corner_handling not in ['none', 'round', 'adaptive']:
-            raise ValueError(f"지원하지 않는 모서리 처리 방식입니다: {corner_handling}")
-    
-    def _calculate_normals(self, points: List[Tuple[float, float]]) -> List[Tuple[float, float]]:
-        """각 세그먼트의 법선 벡터 계산"""
-        normals = []
-        
-        for i in range(len(points) - 1):
-            p1, p2 = points[i], points[i + 1]
-            
-            # 세그먼트 벡터
-            dx = p2[0] - p1[0]
-            dy = p2[1] - p1[1]
-            
-            # 법선 벡터 (시계 반대 방향)
-            normal_x = -dy
-            normal_y = dx
-            
-            # 정규화
-            mag = math.sqrt(normal_x**2 + normal_y**2)
-            if mag > 0:
-                normal_x /= mag
-                normal_y /= mag
-            
-            normals.append((normal_x, normal_y))
-        
-        return normals
-    
-    def _handle_corners(self, points: List[Tuple[float, float]], 
-                        handling: str, parameters: Dict[str, Any]) -> List[Tuple[float, float]]:
-        """모서리 처리"""
-        if handling == 'none' or len(points) < 3:
-            return points
-        
-        if handling == 'round':
-            return self._round_corners(points, parameters)
-        elif handling == 'adaptive':
-            return self._adaptive_corner_handling(points, parameters)
-        
-        return points
-    
-    def _round_corners(self, points: List[Tuple[float, float]], 
-                       parameters: Dict[str, Any]) -> List[Tuple[float, float]]:
-        """모서리 둥글게 처리"""
-        if len(points) < 3:
-            return points
-        
-        rounded_points = [points[0]]  # 시작점
-        
-        for i in range(1, len(points) - 1):
-            prev_point = points[i - 1]
-            curr_point = points[i]
-            next_point = points[i + 1]
-            
-            # 각도 계산
-            angle = self._calculate_angle(prev_point, curr_point, next_point)
-            
-            # 각도가 임계값보다 작으면 둥글게 처리
-            threshold = parameters.get('corner_threshold', math.pi / 6)  # 30도
-            if angle < threshold:
-                # 베지어 곡선으로 둥글게 처리
-                rounded = self._create_rounded_corner(prev_point, curr_point, next_point, parameters)
-                rounded_points.extend(rounded)
+                normal = normal / np.linalg.norm(normal)
+                offset_point = point + normal * offset_distance
+                offset_points.append(offset_point)
             else:
-                rounded_points.append(curr_point)
+                offset_points.append(point)
         
-        rounded_points.append(points[-1])  # 끝점
-        return rounded_points
+        return np.array(offset_points)
     
-    def _adaptive_corner_handling(self, points: List[Tuple[float, float]], 
-                                 parameters: Dict[str, Any]) -> List[Tuple[float, float]]:
-        """적응형 모서리 처리"""
-        if len(points) < 3:
-            return points
+    def _generate_knots(self, num_points: int, degree: int) -> np.ndarray:
+        """B-Spline 노트 벡터 생성"""
+        num_knots = num_points + degree + 1
         
-        # 곡률 기반으로 모서리 처리 방식 결정
-        curvature_threshold = parameters.get('curvature_threshold', 0.5)
+        if self.knot_type == "Uniform":
+            # 균등 노트 벡터
+            knots = np.linspace(0, 1, num_knots)
+        elif self.knot_type == "Chord Length":
+            # 코드 길이 기반 노트 벡터
+            knots = self._chord_length_knots(num_points, degree)
+        elif self.knot_type == "Centripetal":
+            # 중심력 기반 노트 벡터
+            knots = self._centripetal_knots(num_points, degree)
+        else:
+            knots = np.linspace(0, 1, num_knots)
         
-        processed_points = [points[0]]
-        
-        for i in range(1, len(points) - 1):
-            prev_point = points[i - 1]
-            curr_point = points[i]
-            next_point = points[i + 1]
-            
-            # 곡률 계산
-            curvature = self._calculate_curvature(prev_point, curr_point, next_point)
-            
-            if curvature > curvature_threshold:
-                # 높은 곡률: 둥글게 처리
-                rounded = self._create_rounded_corner(prev_point, curr_point, next_point, parameters)
-                processed_points.extend(rounded)
-            else:
-                # 낮은 곡률: 그대로 유지
-                processed_points.append(curr_point)
-        
-        processed_points.append(points[-1])
-        return processed_points
+        return knots
     
-    def _smooth_offset_curve(self, points: List[Tuple[float, float]], 
-                            parameters: Dict[str, Any]) -> List[Tuple[float, float]]:
-        """오프셋 커브 부드럽게 처리"""
-        if len(points) < 3:
-            return points
+    def _chord_length_knots(self, num_points: int, degree: int) -> np.ndarray:
+        """코드 길이 기반 노트 벡터"""
+        # 실제 구현에서는 제어점 간 거리를 계산해야 함
+        # 여기서는 간단한 예시로 구현
+        knots = np.zeros(num_points + degree + 1)
         
-        smoothing_factor = parameters.get('smoothing_factor', 0.3)
-        iterations = parameters.get('smoothing_iterations', 2)
+        # 내부 노트들
+        for i in range(degree + 1, num_points):
+            knots[i] = knots[i-1] + 1.0 / (num_points - degree)
         
-        smoothed_points = points.copy()
+        # 끝 노트들
+        knots[num_points:] = 1.0
         
-        for _ in range(iterations):
-            smoothed_points = self._apply_smoothing(smoothed_points, smoothing_factor)
-        
-        return smoothed_points
+        return knots
     
-    def _calculate_angle(self, p1: Tuple[float, float], p2: Tuple[float, float], 
-                        p3: Tuple[float, float]) -> float:
-        """세 점으로 이루어진 각도 계산"""
-        v1 = (p1[0] - p2[0], p1[1] - p2[1])
-        v2 = (p3[0] - p2[0], p3[1] - p2[1])
+    def _centripetal_knots(self, num_points: int, degree: int) -> np.ndarray:
+        """중심력 기반 노트 벡터"""
+        # 실제 구현에서는 제어점 간 거리의 제곱근을 계산해야 함
+        knots = np.zeros(num_points + degree + 1)
         
-        dot_product = v1[0] * v2[0] + v1[1] * v2[1]
-        mag1 = math.sqrt(v1[0]**2 + v1[1]**2)
-        mag2 = math.sqrt(v2[0]**2 + v2[1]**2)
+        # 내부 노트들
+        for i in range(degree + 1, num_points):
+            knots[i] = knots[i-1] + 1.0 / (num_points - degree)
         
-        if mag1 > 0 and mag2 > 0:
-            cos_angle = max(-1.0, min(1.0, dot_product / (mag1 * mag2)))
-            return math.acos(cos_angle)
+        # 끝 노트들
+        knots[num_points:] = 1.0
         
-        return 0.0
+        return knots
     
-    def _calculate_curvature(self, p1: Tuple[float, float], p2: Tuple[float, float], 
-                            p3: Tuple[float, float]) -> float:
-        """곡률 계산"""
-        # 삼각형 면적 기반 곡률 추정
-        area = abs((p2[0] - p1[0]) * (p3[1] - p1[1]) - (p3[0] - p1[0]) * (p2[1] - p1[1])) / 2
+    def _calculate_tangents(self, points: np.ndarray, knots: np.ndarray, 
+                           degree: int) -> List[np.ndarray]:
+        """B-Spline 제어점에서의 접선 벡터 계산"""
+        tangents = []
         
-        # 세그먼트 길이
-        len1 = math.sqrt((p2[0] - p1[0])**2 + (p2[1] - p1[1])**2)
-        len2 = math.sqrt((p3[0] - p2[0])**2 + (p3[1] - p2[1])**2)
-        
-        if len1 > 0 and len2 > 0:
-            # 곡률 = 면적 / (길이1 * 길이2)
-            return min(1.0, area / (len1 * len2))
-        
-        return 0.0
-    
-    def _create_rounded_corner(self, p1: Tuple[float, float], p2: Tuple[float, float], 
-                              p3: Tuple[float, float], parameters: Dict[str, Any]) -> List[Tuple[float, float]]:
-        """둥근 모서리 생성"""
-        # 간단한 베지어 곡선으로 둥글게 처리
-        control_points = 3
-        rounded = []
-        
-        for i in range(1, control_points):
-            t = i / control_points
-            
-            # 베지어 곡선 계산
-            x = (1-t)**2 * p1[0] + 2*(1-t)*t * p2[0] + t**2 * p3[0]
-            y = (1-t)**2 * p1[1] + 2*(1-t)*t * p2[1] + t**2 * p3[1]
-            
-            rounded.append((x, y))
-        
-        return rounded
-    
-    def _apply_smoothing(self, points: List[Tuple[float, float]], factor: float) -> List[Tuple[float, float]]:
-        """스무딩 적용"""
-        if len(points) < 3:
-            return points
-        
-        smoothed = [points[0]]
-        
-        for i in range(1, len(points) - 1):
-            prev_point = points[i - 1]
-            curr_point = points[i]
-            next_point = points[i + 1]
-            
-            # 가중 평균으로 스무딩
-            smooth_x = curr_point[0] * (1 - factor) + (prev_point[0] + next_point[0]) * factor / 2
-            smooth_y = curr_point[1] * (1 - factor) + (prev_point[1] + next_point[1]) * factor / 2
-            
-            smoothed.append((smooth_x, smooth_y))
-        
-        smoothed.append(points[-1])
-        return smoothed
-
-class PerpendicularOffsetAlgorithm(BaseOffsetAlgorithm):
-    """수직 오프셋 알고리즘"""
-    
-    def generate_offset(self, points: List[Tuple[float, float]], 
-                       distance: float, parameters: Dict[str, Any]) -> Optional[List[Tuple[float, float]]]:
-        """수직 오프셋 커브 생성"""
-        if len(points) < 2:
-            return None
-        
-        # 각 포인트에서 수직 방향으로 오프셋
-        offset_points = []
-        
-        for i, point in enumerate(points):
+        for i in range(len(points)):
             if i == 0:
-                # 시작점: 첫 번째 세그먼트의 수직 방향
-                next_point = points[i + 1]
-                dx = next_point[0] - point[0]
-                dy = next_point[1] - point[1]
-                
-                # 수직 벡터 (시계 반대 방향)
-                normal_x = -dy
-                normal_y = dx
+                # 첫 번째 포인트
+                tangent = points[1] - points[0]
             elif i == len(points) - 1:
-                # 끝점: 마지막 세그먼트의 수직 방향
-                prev_point = points[i - 1]
-                dx = point[0] - prev_point[0]
-                dy = point[1] - prev_point[1]
-                
-                # 수직 벡터 (시계 반대 방향)
-                normal_x = -dy
-                normal_y = dx
+                # 마지막 포인트
+                tangent = points[-1] - points[-2]
             else:
-                # 중간점: 두 세그먼트의 평균 수직 방향
-                prev_point = points[i - 1]
-                next_point = points[i + 1]
-                
-                # 이전 세그먼트 수직 벡터
-                dx1 = point[0] - prev_point[0]
-                dy1 = point[1] - prev_point[1]
-                normal1_x = -dy1
-                normal1_y = dx1
-                
-                # 다음 세그먼트 수직 벡터
-                dx2 = next_point[0] - point[0]
-                dy2 = next_point[1] - point[1]
-                normal2_x = -dy2
-                normal2_y = dx2
-                
-                # 평균 수직 벡터
-                normal_x = (normal1_x + normal2_x) / 2
-                normal_y = (normal1_y + normal2_y) / 2
+                # 중간 포인트들
+                tangent = (points[i+1] - points[i-1]) / 2
             
             # 정규화
-            mag = math.sqrt(normal_x**2 + normal_y**2)
-            if mag > 0:
-                normal_x /= mag
-                normal_y /= mag
+            norm = np.linalg.norm(tangent)
+            if norm > self.tolerance:
+                tangent = tangent / norm
+            else:
+                tangent = np.zeros_like(tangent)
             
-            # 오프셋 포인트 생성
-            offset_point = (point[0] + normal_x * distance, point[1] + normal_y * distance)
-            offset_points.append(offset_point)
+            tangents.append(tangent)
         
-        return offset_points
-    
-    def validate_parameters(self, parameters: Dict[str, Any]):
-        """파라미터 유효성 검증"""
-        # 수직 오프셋은 특별한 파라미터가 필요하지 않음
-        pass
+        return tangents
 
-class AdaptiveOffsetAlgorithm(BaseOffsetAlgorithm):
+class AdaptiveOffsetAlgorithm(OffsetCurveAlgorithm):
     """적응형 오프셋 알고리즘"""
     
-    def generate_offset(self, points: List[Tuple[float, float]], 
-                       distance: float, parameters: Dict[str, Any]) -> Optional[List[Tuple[float, float]]]:
-        """적응형 오프셋 커브 생성"""
-        if len(points) < 2:
-            return None
+    def __init__(self, curvature_threshold: float = 0.1):
+        super().__init__()
+        self.curvature_threshold = curvature_threshold
+    
+    def generate_offset(self, curve_points: np.ndarray, offset_distance: float,
+                       **kwargs) -> np.ndarray:
+        """
+        곡률에 따라 거리를 자동 조정하는 적응형 오프셋 생성
         
-        # 곡률 기반으로 오프셋 거리 조정
-        curvature_threshold = parameters.get('curvature_threshold', 0.3)
-        max_distance_factor = parameters.get('max_distance_factor', 2.0)
+        Args:
+            curve_points: 원본 커브의 제어점들
+            offset_distance: 기본 오프셋 거리
+            **kwargs: 추가 옵션들
+            
+        Returns:
+            적응형 오프셋 커브의 제어점들
+        """
+        if len(curve_points) < 3:
+            return curve_points.copy()
         
+        # 각 포인트에서의 곡률 계산
+        curvatures = self._calculate_curvatures(curve_points)
+        
+        # 곡률에 따른 적응형 거리 계산
+        adaptive_distances = []
+        for curvature in curvatures:
+            if curvature > self.curvature_threshold:
+                # 높은 곡률에서는 거리를 줄임
+                factor = max(0.1, 1.0 - curvature / self.curvature_threshold)
+                adaptive_distances.append(offset_distance * factor)
+            else:
+                # 낮은 곡률에서는 기본 거리 사용
+                adaptive_distances.append(offset_distance)
+        
+        # 적응형 거리로 오프셋 생성
         offset_points = []
-        
-        for i, point in enumerate(points):
-            if i == 0 or i == len(points) - 1:
-                # 시작점과 끝점은 기본 거리 사용
-                adjusted_distance = distance
-            else:
-                # 중간점은 곡률에 따라 거리 조정
-                curvature = self._calculate_point_curvature(points, i)
-                
-                if curvature > curvature_threshold:
-                    # 높은 곡률: 거리 감소
-                    adjusted_distance = distance * (1 - curvature * 0.5)
+        for i, (point, distance) in enumerate(zip(curve_points, adaptive_distances)):
+            if i == 0 or i == len(curve_points) - 1:
+                # 끝점들은 이웃과의 방향으로 오프셋
+                if i == 0:
+                    direction = curve_points[1] - point
                 else:
-                    # 낮은 곡률: 거리 증가 (최대 제한)
-                    adjusted_distance = min(distance * max_distance_factor, 
-                                        distance * (1 + (1 - curvature) * 0.3))
-            
-            # 수직 방향 계산
-            if i == 0:
-                next_point = points[i + 1]
-                dx = next_point[0] - point[0]
-                dy = next_point[1] - point[1]
-            elif i == len(points) - 1:
-                prev_point = points[i - 1]
-                dx = point[0] - prev_point[0]
-                dy = point[1] - prev_point[1]
+                    direction = point - curve_points[i-1]
             else:
-                # 두 세그먼트의 평균 방향
-                prev_point = points[i - 1]
-                next_point = points[i + 1]
-                dx = (next_point[0] - prev_point[0]) / 2
-                dy = (next_point[1] - prev_point[1]) / 2
+                # 중간점들은 이웃들의 평균 방향으로 오프셋
+                direction = (curve_points[i+1] - curve_points[i-1]) / 2
             
-            # 수직 벡터
-            normal_x = -dy
-            normal_y = dx
-            
-            # 정규화
-            mag = math.sqrt(normal_x**2 + normal_y**2)
-            if mag > 0:
-                normal_x /= mag
-                normal_y /= mag
-            
-            # 오프셋 포인트 생성
-            offset_point = (point[0] + normal_x * adjusted_distance, 
-                          point[1] + normal_y * adjusted_distance)
-            offset_points.append(offset_point)
+            if np.linalg.norm(direction) > self.tolerance:
+                direction = direction / np.linalg.norm(direction)
+                
+                # 수직 방향 계산
+                if len(point) == 3:  # 3D
+                    if abs(direction[2]) < 0.9:
+                        normal = np.cross(direction, [0, 0, 1])
+                    else:
+                        normal = np.cross(direction, [1, 0, 0])
+                else:  # 2D
+                    normal = np.array([-direction[1], direction[0]])
+                
+                normal = normal / np.linalg.norm(normal)
+                offset_point = point + normal * distance
+                offset_points.append(offset_point)
+            else:
+                offset_points.append(point)
         
-        return offset_points
+        return np.array(offset_points)
     
-    def validate_parameters(self, parameters: Dict[str, Any]):
-        """파라미터 유효성 검증"""
-        curvature_threshold = parameters.get('curvature_threshold', 0.3)
-        if not (0.0 <= curvature_threshold <= 1.0):
-            raise ValueError("곡률 임계값은 0.0과 1.0 사이여야 합니다")
+    def _calculate_curvatures(self, points: np.ndarray) -> List[float]:
+        """포인트에서의 곡률 계산"""
+        curvatures = []
         
-        max_distance_factor = parameters.get('max_distance_factor', 2.0)
-        if max_distance_factor <= 1.0:
-            raise ValueError("최대 거리 계수는 1.0보다 커야 합니다")
+        for i in range(len(points)):
+            if i == 0 or i == len(points) - 1:
+                # 끝점들은 0 곡률
+                curvatures.append(0.0)
+            else:
+                # 중간점들의 곡률 계산
+                p1 = points[i-1]
+                p2 = points[i]
+                p3 = points[i+1]
+                
+                # 두 벡터
+                v1 = p2 - p1
+                v2 = p3 - p2
+                
+                # 벡터 길이
+                l1 = np.linalg.norm(v1)
+                l2 = np.linalg.norm(v2)
+                
+                if l1 > self.tolerance and l2 > self.tolerance:
+                    # 정규화
+                    v1_norm = v1 / l1
+                    v2_norm = v2 / l2
+                    
+                    # 각도 계산
+                    cos_angle = np.clip(np.dot(v1_norm, v2_norm), -1.0, 1.0)
+                    angle = np.arccos(cos_angle)
+                    
+                    # 곡률 (각도 / 거리)
+                    curvature = angle / ((l1 + l2) / 2)
+                else:
+                    curvature = 0.0
+                
+                curvatures.append(curvature)
+        
+        return curvatures
+
+class OffsetCurveFactory:
+    """오프셋 커브 알고리즘 팩토리 클래스"""
     
-    def _calculate_point_curvature(self, points: List[Tuple[float, float]], index: int) -> float:
-        """특정 포인트의 곡률 계산"""
-        if index == 0 or index == len(points) - 1:
-            return 0.0
+    @staticmethod
+    def create_algorithm(algorithm_type: str, **kwargs) -> OffsetCurveAlgorithm:
+        """
+        알고리즘 타입에 따라 적절한 오프셋 알고리즘 생성
         
-        prev_point = points[index - 1]
-        curr_point = points[index]
-        next_point = points[index + 1]
+        Args:
+            algorithm_type: 알고리즘 타입 ("arc_segment", "bspline", "adaptive")
+            **kwargs: 알고리즘별 설정 파라미터들
+            
+        Returns:
+            오프셋 알고리즘 인스턴스
+        """
+        if algorithm_type == "arc_segment":
+            return ArcSegmentOffsetAlgorithm(
+                segment_count=kwargs.get('segment_count', 8),
+                tolerance=kwargs.get('tolerance', 0.01)
+            )
+        elif algorithm_type == "bspline":
+            return BSplineOffsetAlgorithm(
+                degree=kwargs.get('degree', 3),
+                knot_type=kwargs.get('knot_type', 'Uniform')
+            )
+        elif algorithm_type == "adaptive":
+            return AdaptiveOffsetAlgorithm(
+                curvature_threshold=kwargs.get('curvature_threshold', 0.1)
+            )
+        else:
+            raise ValueError(f"Unknown algorithm type: {algorithm_type}")
+
+# 기존 코드 유지
+class OffsetCurveGenerator:
+    """오프셋 커브 생성기"""
+    
+    def __init__(self, algorithm: OffsetCurveAlgorithm):
+        self.algorithm = algorithm
+    
+    def generate_offset_curve(self, curve_points: np.ndarray, offset_distance: float,
+                             **kwargs) -> np.ndarray:
+        """오프셋 커브 생성"""
+        return self.algorithm.generate_offset(curve_points, offset_distance, **kwargs)
+    
+    def generate_smooth_offset_curve(self, curve_points: np.ndarray, offset_distance: float,
+                                   smoothing_factor: float = 0.3, **kwargs) -> np.ndarray:
+        """부드러운 오프셋 커브 생성"""
+        if hasattr(self.algorithm, 'generate_smooth_offset'):
+            return self.algorithm.generate_smooth_offset(curve_points, offset_distance, 
+                                                      smoothing_factor, **kwargs)
+        else:
+            # 기본 오프셋 생성 후 스무딩 적용
+            base_offset = self.algorithm.generate_offset(curve_points, offset_distance, **kwargs)
+            return self._apply_smoothing(base_offset, smoothing_factor)
+    
+    def _apply_smoothing(self, points: np.ndarray, smoothing_factor: float) -> np.ndarray:
+        """포인트에 스무딩 적용"""
+        if len(points) < 3:
+            return points
         
-        # 삼각형 면적 기반 곡률
-        area = abs((curr_point[0] - prev_point[0]) * (next_point[1] - prev_point[1]) - 
-                   (next_point[0] - prev_point[0]) * (curr_point[1] - prev_point[1])) / 2
+        smoothed = points.copy()
         
-        # 세그먼트 길이
-        len1 = math.sqrt((curr_point[0] - prev_point[0])**2 + (curr_point[1] - prev_point[1])**2)
-        len2 = math.sqrt((next_point[0] - curr_point[0])**2 + (next_point[1] - curr_point[1])**2)
+        for _ in range(5):  # 5회 반복
+            for i in range(1, len(smoothed) - 1):
+                neighbor_avg = (smoothed[i-1] + smoothed[i+1]) / 2
+                smoothed[i] = (1 - smoothing_factor) * smoothed[i] + \
+                             smoothing_factor * neighbor_avg
         
-        if len1 > 0 and len2 > 0:
-            return min(1.0, area / (len1 * len2))
-        
-        return 0.0
+        return smoothed
+
+# 사용 예시
+def create_offset_curve_example():
+    """오프셋 커브 생성 예시"""
+    # 샘플 커브 포인트 (2D)
+    curve_points = np.array([
+        [0, 0], [1, 1], [2, 0], [3, 1], [4, 0],
+        [5, 1], [6, 0], [7, 1], [8, 0], [9, 1]
+    ])
+    
+    # Arc Segment 방식
+    arc_algorithm = OffsetCurveFactory.create_algorithm("arc_segment", segment_count=8)
+    arc_generator = OffsetCurveGenerator(arc_algorithm)
+    arc_offset = arc_generator.generate_offset_curve(curve_points, 0.5)
+    
+    # B-Spline 방식
+    bspline_algorithm = OffsetCurveFactory.create_algorithm("bspline", degree=3)
+    bspline_generator = OffsetCurveGenerator(bspline_algorithm)
+    bspline_offset = bspline_generator.generate_offset_curve(curve_points, 0.5)
+    
+    # 적응형 방식
+    adaptive_algorithm = OffsetCurveFactory.create_algorithm("adaptive", curvature_threshold=0.1)
+    adaptive_generator = OffsetCurveGenerator(adaptive_algorithm)
+    adaptive_offset = adaptive_generator.generate_offset_curve(curve_points, 0.5)
+    
+    return {
+        'arc_segment': arc_offset,
+        'bspline': bspline_offset,
+        'adaptive': adaptive_offset
+    }
+
+if __name__ == "__main__":
+    # 테스트 실행
+    results = create_offset_curve_example()
+    print("Offset curves generated successfully!")
+    print(f"Arc Segment: {len(results['arc_segment'])} points")
+    print(f"B-Spline: {len(results['bspline'])} points")
+    print(f"Adaptive: {len(results['adaptive'])} points")

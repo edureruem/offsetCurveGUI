@@ -1,174 +1,143 @@
 # Offset Curve Deformer & Input Curve Optimizer GUI
 
-offsetCurveDeformer와 inputCurveOptimizer를 통합하여 사용할 수 있는 직관적인 GUI 애플리케이션입니다.
+Maya 2020 호환 오프셋 커브 디포머 및 입력 커브 최적화 GUI 시스템입니다.
 
 ## 🚀 주요 기능
 
-### 🔧 통합 워크플로우
-- **단계별 처리**: 입력 커브 로딩 → 최적화 → 오프셋 생성 → 검증 → 내보내기
-- **자동화된 파이프라인**: 복잡한 설정 없이도 원클릭으로 전체 프로세스 실행
-- **진행률 모니터링**: 실시간 워크플로우 진행 상황 확인
+### 1. Input Curve Optimizer
+- **메시 기반 커브 생성**: 메시 오브젝트에서 최적화된 커브 자동 생성
+- **스켈레톤 기반 커브 생성**: 조인트 체인을 따라 최적화된 커브 생성
+- **기존 커브 최적화**: NURBS 커브의 제어점 수 최적화 및 부드러움 개선
+- **품질 기반 최적화**: 곡률과 형태를 고려한 지능형 최적화
 
-### 🎯 Input Curve Optimizer
-- **스마트 최적화**: 곡률 기반 자동 포인트 최적화
-- **품질 조절**: low/medium/high 최적화 레벨 선택
-- **스무딩 제어**: 커브 부드러움 정도 조절
-- **단순화 임계값**: 불필요한 포인트 자동 제거
+### 2. Offset Curve Deformer
+- **Arc Segment 방식**: 세그먼트를 호(arc)로 근사하여 오프셋 생성
+- **B-Spline 방식**: B-Spline 곡선 기반 정밀한 오프셋 생성
+- **적응형 오프셋**: 곡률에 따라 거리를 자동 조정하는 오프셋
+- **모서리 처리**: 둥근 모서리, 적응형 모서리 처리 지원
 
-### 📐 Offset Curve Deformer
-- **다양한 오프셋**: left/right/both 방향 지원
-- **거리 조절**: 정밀한 오프셋 거리 설정
-- **품질 옵션**: low부터 ultra까지 품질 선택
-- **충돌 해결**: 자동 오프셋 충돌 감지 및 해결
+### 3. 통합 워크플로우
+- **Maya 씬 연동**: Maya 2020과 직접 연동하여 커브 데이터 처리
+- **워크플로우 기반**: 단계별 작업 진행 및 상태 관리
+- **자동화**: 선택된 오브젝트에서 자동으로 커브 생성 및 최적화
 
-### 🧠 컨텍스트 인식 도구
-- **자동 분석**: 입력 커브 특성 자동 감지
-- **스마트 제안**: 커브 특성에 맞는 최적 설정 자동 제안
-- **품질 최적화**: 커브 복잡도에 따른 자동 파라미터 조정
+## 🛠️ 설치 및 실행
 
-### ⚙️ 고급 옵션
-- **알고리즘 선택**: parallel, perpendicular, adaptive 오프셋 방식
-- **성능 최적화**: 병렬 처리, 메모리 제한, 캐시 설정
-- **품질 우선순위**: speed, balanced, quality 중 선택
+### 필수 요구사항
+- Maya 2020
+- Python 2.7 (Maya 2020 기본)
+- PySide2 (Maya 2020 기본 제공)
 
-## 📋 시스템 요구사항
+### 설치 방법
 
-- **Python**: 3.8 이상
-- **운영체제**: Windows 10/11, macOS 10.15+, Ubuntu 18.04+
-- **메모리**: 최소 4GB RAM (권장 8GB+)
-- **디스플레이**: 1280x720 이상 해상도
-
-## 🛠️ 설치 방법
-
-### 1. 저장소 클론
+1. **프로젝트 클론**
 ```bash
-git clone https://github.com/yourusername/offsetCurveGUI.git
+git clone <repository-url>
 cd offsetCurveGUI
 ```
 
-### 2. 가상환경 생성 (권장)
-```bash
-python -m venv venv
-source venv/bin/activate  # Linux/macOS
-# 또는
-venv\Scripts\activate     # Windows
-```
-
-### 3. 의존성 설치
+2. **의존성 설치**
 ```bash
 pip install -r requirements.txt
 ```
 
-## 🚀 사용 방법
-
-### 기본 실행
-```bash
-python src/main.py
+3. **Maya에서 실행**
+```python
+# Maya 스크립트 에디터에서
+exec(open("src/main.py").read())
 ```
 
-### 워크플로우 사용법
+## 🎨 GUI 사용법
 
-1. **워크플로우 시작**
-   - "워크플로우 시작" 버튼 클릭
-   - 자동으로 첫 번째 단계(입력 커브 로딩) 실행
+### Scene Objects 관리
+- **Curves**: 씬의 모든 커브를 리스트로 표시
+- **Meshes**: 씬의 모든 메시를 리스트로 표시  
+- **Joints**: 씬의 모든 조인트를 리스트로 표시
+- **Add/Del**: 수동으로 오브젝트 추가/제거
 
-2. **단계별 실행**
-   - "현재 단계 실행" 버튼으로 각 단계 수동 실행
-   - "다음 단계" 버튼으로 다음 단계로 진행
+### Offset Deformer 설정
+- **Arc Segment**: 세그먼트 수, 허용오차 설정
+- **B-Spline**: 차수, 노트 타입 설정
+- **Deformer Options**: 가중치 페인팅 모드, 자동 업데이트
 
-3. **파라미터 설정**
-   - 각 단계별 파라미터를 UI에서 조정
-   - "파라미터 적용" 버튼으로 설정 저장
+### Binding & Connections
+- **자동 감지**: 커브의 custom attributes에서 연결된 디포머 노드 자동 찾기
+- **Bind Selected**: 선택된 커브와 메시를 바인딩
+- **Paint Weights**: 바인딩된 메시의 가중치 페인팅 모드 활성화
 
-4. **결과 확인**
-   - 로그 패널에서 실행 결과 확인
-   - 진행률 바로 전체 진행 상황 모니터링
+## 🔧 기술적 특징
 
-### 고급 사용법
+### Arc Segment 방식
+- 각 세그먼트를 호(arc)로 근사
+- 세그먼트 수와 허용오차 조정 가능
+- 빠른 처리 속도와 안정성
 
-#### 컨텍스트 인식 도구
-1. "커브 분석 실행" 버튼 클릭
-2. 자동으로 커브 특성 분석
-3. "제안된 설정 적용"으로 최적 설정 자동 적용
+### B-Spline 방식
+- 정밀한 B-Spline 곡선 기반
+- 차수와 노트 타입 선택 가능
+- Uniform, Chord Length, Centripetal 노트 지원
 
-#### 고급 옵션 설정
-1. 고급 옵션 패널에서 세부 설정 조정
-2. 알고리즘, 품질, 성능 옵션 선택
-3. "고급 옵션 적용" 버튼으로 설정 저장
+### 적응형 오프셋
+- 곡률 기반 거리 자동 조정
+- 높은 곡률에서는 거리 감소
+- 낮은 곡률에서는 거리 증가
 
 ## 📁 프로젝트 구조
 
 ```
 offsetCurveGUI/
-├── src/                          # 소스 코드
-│   ├── main.py                   # 메인 애플리케이션 진입점
-│   ├── integratedWorkflow/       # 통합 워크플로우 관리
-│   │   └── workflow_manager.py   # 워크플로우 매니저
-│   ├── offsetCurveDeformer/      # 오프셋 커브 디포머
-│   └── inputCurveOptimizer/      # 입력 커브 최적화
-├── ui/                           # 사용자 인터페이스
-│   ├── main_window.py            # 메인 윈도우
-│   ├── advancedOptions/          # 고급 옵션
-│   │   └── advanced_panel.py     # 고급 옵션 패널
-│   ├── basicWorkflow/            # 기본 워크플로우
-│   └── contextAware/             # 컨텍스트 인식 도구
-│       └── context_tools.py      # 컨텍스트 인식 도구
-├── resources/                     # 리소스 파일
-├── docs/                         # 문서
-├── requirements.txt               # Python 의존성
-└── README.md                     # 프로젝트 설명서
+├── src/
+│   ├── core/                 # 핵심 시스템
+│   ├── inputCurveOptimizer/  # 입력 커브 최적화
+│   ├── offsetCurveDeformer/  # 오프셋 커브 디포머
+│   └── integratedWorkflow/   # 통합 워크플로우
+├── ui/                       # GUI 인터페이스
+├── external/                 # 외부 플러그인
+└── docs/                     # 문서
 ```
 
-## 🔧 개발자 가이드
+## 🎯 사용 시나리오
 
-### 새로운 기능 추가
-1. `src/` 디렉토리에 새로운 모듈 생성
-2. `ui/` 디렉토리에 해당 UI 컴포넌트 추가
-3. `workflow_manager.py`에 새로운 워크플로우 단계 추가
-
-### 테스트 실행
-```bash
-# 단위 테스트
-pytest tests/
-
-# 코드 품질 검사
-flake8 src/ ui/
-black src/ ui/
+### 1. 캐릭터 의상 커브 생성
+```
+1. 스커트 메시 선택
+2. Input Curve Optimizer로 최적화된 커브 생성
+3. Arc Segment 방식으로 내부/외부 경계선 오프셋
+4. 바인딩 및 가중치 페인팅
 ```
 
-### 빌드 및 배포
-```bash
-# 실행 파일 생성 (PyInstaller 사용)
-pyinstaller --onefile --windowed src/main.py
-
-# 배포 패키지 생성
-python setup.py sdist bdist_wheel
+### 2. 건축 디자인 커브
+```
+1. 건물 외곽선 메시 선택
+2. B-Spline 방식으로 정밀한 오프셋 생성
+3. 적응형 오프셋으로 곡률에 따른 거리 조정
+4. 결과 커브를 건축 도면에 활용
 ```
 
-## 🤝 기여하기
+## 🔍 문제 해결
 
-1. Fork the Project
-2. Create your Feature Branch (`git checkout -b feature/AmazingFeature`)
-3. Commit your Changes (`git commit -m 'Add some AmazingFeature'`)
-4. Push to the Branch (`git push origin feature/AmazingFeature`)
-5. Open a Pull Request
+### 일반적인 문제들
+- **커브가 생성되지 않음**: 메시 선택 확인, Maya 버전 호환성 체크
+- **오프셋이 부정확함**: 허용오차 조정, 세그먼트 수 증가
+- **바인딩 실패**: 커브와 메시 선택 순서 확인
 
-## 📝 라이선스
-
-이 프로젝트는 MIT 라이선스 하에 배포됩니다. 자세한 내용은 `LICENSE` 파일을 참조하세요.
+### 성능 최적화
+- **대용량 메시**: 세그먼트 수 줄이기, 허용오차 증가
+- **복잡한 커브**: B-Spline 차수 조정, 노트 타입 변경
 
 ## 📞 지원 및 문의
 
-- **이슈 리포트**: [GitHub Issues](https://github.com/yourusername/offsetCurveGUI/issues)
-- **문의**: your.email@example.com
-- **문서**: [Wiki](https://github.com/yourusername/offsetCurveGUI/wiki)
+- **이슈 리포트**: GitHub Issues
+- **기능 요청**: Feature Request 템플릿 사용
+- **문서 개선**: Pull Request 환영
 
-## 🙏 감사의 말
+## 📄 라이선스
 
-- offsetCurveDeformer 개발팀
-- inputCurveOptimizer 개발팀
-- 이 프로젝트에 기여해주신 모든 분들
+이 프로젝트는 MIT 라이선스 하에 배포됩니다.
 
 ---
 
-**참고**: 이 프로젝트는 개발 중인 상태입니다. 프로덕션 환경에서 사용하기 전에 충분한 테스트를 진행해주세요.
+**Maya 호환성**: 2020+  
+**Python 버전**: 2.7 (Maya 2020), 3.7+ (독립 실행)
+
+더 자세한 정보는 `docs/` 폴더의 문서를 참조하세요.

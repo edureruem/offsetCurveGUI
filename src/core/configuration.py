@@ -53,10 +53,17 @@ class ConfigurationManager(IConfigurationManager):
                 "quality_threshold": 0.8
             },
             "offset": {
-                "default_offset_distance": 1.0,
-                "default_offset_direction": "both",
-                "default_quality_level": "medium",
-                "enable_collision_detection": True
+                "default_offset_mode": "arc_segment",
+                "default_falloff_radius": 10.0,
+                "default_max_influences": 4,
+                "default_volume_strength": 1.0,
+                "default_slide_effect": 0.0,
+                "default_rotation_distribution": 0.5,
+                "default_scale_distribution": 0.5,
+                "default_twist_distribution": 0.5,
+                "default_axial_sliding": 0.0,
+                "enable_parallel_processing": True,
+                "enable_debug_display": False
             },
             "export": {
                 "default_format": "svg",

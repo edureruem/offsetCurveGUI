@@ -1,20 +1,12 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python
 # -*- coding: utf-8 -*-
 """
-Input Curve Optimizer 모듈
-커브 최적화 기능을 제공하는 모듈
+Input Curve Optimizer Module
+Module providing curve optimization functionality
 """
 
-from .curve_optimizer import CurveOptimizer
-from .optimization_algorithms import (
-    DouglasPeuckerOptimizer,
-    SmoothingOptimizer,
-    QualityOptimizer
-)
+from .curve_optimizer import InputCurveOptimizerWrapper
 
 __all__ = [
-    'CurveOptimizer',
-    'DouglasPeuckerOptimizer',
-    'SmoothingOptimizer',
-    'QualityOptimizer'
+    'InputCurveOptimizerWrapper'
 ]
