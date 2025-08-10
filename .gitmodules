@@ -1,0 +1,6 @@
+[submodule "external/offsetCurveDeformer"]
+	path = external/offsetCurveDeformer
+	url = https://github.com/edureruem/offsetCurveDeformer.git
+[submodule "external/inputCurveOptimizer"]
+	path = external/inputCurveOptimizer
+	url = https://github.com/edureruem/inputCurveOptimizer.git
